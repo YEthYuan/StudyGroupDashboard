@@ -30,13 +30,20 @@ let GLOBAL_TRACKER_LIST = {
   groupChartLabel: [],
   groupChartData: [],
   chartDateTime: new Date(),
+  trackerType: 'chart',
 };
 
 let GLOBAL_TRACKER_PRESENTATION = {
   type: ['bar', 'doughnut', 'line'],
-  name: ['chart1', 'chart2', 'chart3'],
+  name: ['chart1', 'chart2', 'chart3', 'chart4'],
   label: ['groupChartLabel', 'groupChartLabel', 'dateChartLabel'],
-  data: ['groupChartData', 'groupChartData', 'dateChartDate'] 
+  data: ['groupChartData', 'groupChartData', 'dateChartDate'],
+  startDate: '1/1/2020',
+  endDate: '1/1/2020'
+}
+
+function compareSecondElement(a, b) {
+  return b[1] - a[1];
 }
 
 function getDiscordUserId(){
@@ -50,13 +57,13 @@ function getUserId(){
 }
 
 function getDates(inDate, chartType){
-  var startDate = new Date();
-  var endDate = new Date();
+  var startDate = new Date(inDate);
+  var endDate = new Date(inDate);
 
   if(chartType == 'week'){
     const currentDayOfWeek = inDate.getDay();
-    const daysUntilMonday = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1;
-    const daysUntilSunday = 7 - currentDayOfWeek;
+    const daysUntilMonday = (currentDayOfWeek + 6) % 7;
+    const daysUntilSunday = (currentDayOfWeek === 0) ? 0 : (7 - currentDayOfWeek);
     startDate.setDate(inDate.getDate() - daysUntilMonday);
     endDate.setDate(inDate.getDate() + daysUntilSunday);
   }else{
@@ -65,13 +72,39 @@ function getDates(inDate, chartType){
     startDate = new Date(currentYear, currentMonth, 1);
     endDate = new Date(currentYear, currentMonth + 1, 0);
   }
-  
+  // console.log("In date:", inDate);
   // console.log("Previous Monday:", startDate);
   // console.log("Next Sunday:", endDate);
+  GLOBAL_TRACKER_PRESENTATION.startDate = startDate;
+  GLOBAL_TRACKER_PRESENTATION.endDate = endDate;
+
   return [startDate, endDate];
 }
 
+function loadRank(){
+  destroyAllCharts();
+  GLOBAL_TRACKER_LIST.chartType = 'rank';
+  var todayDate = GLOBAL_TRACKER_LIST.chartDateTime;
+  var [startDate, endDate] = getDates(todayDate, GLOBAL_TRACKER_LIST.chartPeriod);
+  startDate = formatDateToMMDDYYYY(startDate);
+  endDate = formatDateToMMDDYYYY(endDate);
+  $.ajax({
+    type: 'post',
+    dataType: "json",
+    url: "/tracker/",
+    data: {
+      'postType': 'rankView',
+      'startDate': startDate,
+      'endDate': endDate,
+    },
+    headers: { "X-CSRFToken": csrftoken },
+  }).done(function(result) {
+    updateRankChart(result);
+  });
+}
+
 function getData(){
+  GLOBAL_TRACKER_LIST.chartType = 'chart';
   var currentUserId = getUserId();
   var todayDate = GLOBAL_TRACKER_LIST.chartDateTime;
   var discordUserId = getDiscordUserId();
@@ -136,6 +169,7 @@ function initialChartData(){
 }
 
 function loadStudy(){
+  destroyAllCharts();
   initialChartData();
 }
 
@@ -147,31 +181,52 @@ document.addEventListener('DOMContentLoaded', function() {
 document.getElementById('viewByWeekBtn').addEventListener('click', function() {
   GLOBAL_TRACKER_LIST.chartPeriod = "week";
   GLOBAL_TRACKER_LIST.chartDateTime = new Date();
-  getData();
+  if (GLOBAL_TRACKER_LIST.chartType == 'rank'){
+    loadRank();
+  }else{
+    getData();
+  }
 });
 
 document.getElementById('viewByMonthBtn').addEventListener('click', function() {
   GLOBAL_TRACKER_LIST.chartPeriod = "month";
   GLOBAL_TRACKER_LIST.chartDateTime = new Date();
-  getData();
+  if (GLOBAL_TRACKER_LIST.chartType == 'rank'){
+    loadRank();
+  }else{
+    getData();
+  }
 });
 
 document.getElementById('prevBtn').addEventListener('click', function() {
+  // console.log('pre today date:', GLOBAL_TRACKER_LIST.chartDateTime);
   if(GLOBAL_TRACKER_LIST.chartPeriod == 'week'){
-    GLOBAL_TRACKER_LIST.chartDateTime = new Date(GLOBAL_TRACKER_LIST.chartDateTime - 7 * 24 * 60 * 60 * 1000);
+    GLOBAL_TRACKER_LIST.chartDateTime.setDate(GLOBAL_TRACKER_LIST.chartDateTime.getDate() - 7);
   }else{
     GLOBAL_TRACKER_LIST.chartDateTime = new Date( GLOBAL_TRACKER_LIST.chartDateTime.getFullYear(),  GLOBAL_TRACKER_LIST.chartDateTime.getMonth() - 1,  GLOBAL_TRACKER_LIST.chartDateTime.getDate());
   }
-  getData();
+  // console.log('next today date after:', GLOBAL_TRACKER_LIST.chartDateTime);
+  // console.log("TRACKER TIME:" + GLOBAL_TRACKER_LIST.chartDateTime);
+  if (GLOBAL_TRACKER_LIST.chartType == 'rank'){
+    loadRank();
+  }else{
+    getData();
+  }
 });
 
 document.getElementById('nextBtn').addEventListener('click', function() {
+  // console.log('next today date:', GLOBAL_TRACKER_LIST.chartDateTime);
   if (GLOBAL_TRACKER_LIST.chartPeriod == 'week'){
-    GLOBAL_TRACKER_LIST.chartDateTime = new Date(GLOBAL_TRACKER_LIST.chartDateTime + 7 * 24 * 60 * 60 * 1000);
+    GLOBAL_TRACKER_LIST.chartDateTime.setDate(GLOBAL_TRACKER_LIST.chartDateTime.getDate() + 7);
   }else{
     GLOBAL_TRACKER_LIST.chartDateTime = new Date( GLOBAL_TRACKER_LIST.chartDateTime.getFullYear(),  GLOBAL_TRACKER_LIST.chartDateTime.getMonth() + 1,  GLOBAL_TRACKER_LIST.chartDateTime.getDate());
   }
-  getData();
+  // console.log('next today date after:', GLOBAL_TRACKER_LIST.chartDateTime);
+  if (GLOBAL_TRACKER_LIST.chartType == 'rank'){
+    loadRank();
+  }else{
+    getData();
+  }
 });
 
 function clearAllChartData(){
@@ -184,64 +239,73 @@ function clearAllChartData(){
 }
 
 function configureDateChart(ret){
-  var userData = ret['userData'];
-  var avgData = ret['avgData'];
-  var chartDateDict = {};
-  var chartDateAvgDict = {};
-  var chartDateAvgCnt = {};
-  var chartTypeDict = {};
+  const userData = ret['userData'];
+  const avgData = ret['avgData'];
+  const chartDateDict = {};
+  const chartDateAvgDict = {};
+  const chartDateAvgCnt = {};
+  const chartTypeDict = {};
 
   // console.log(ret);
   // user Data
-  for (var i = 0; i < userData.length; i++) {
-    var studyDate = userData[i]['studyDate'];
-    var studyTime = userData[i]['studyTime'];
-    var studyTopic = userData[i]['studyTopic'];
+  for (const item of userData) {
+    const studyDate = item.studyDate;
+    const studyTime = item.studyTime;
+    const studyTopic = item.studyTopic;
     // date dict
-    if (!chartDateDict.hasOwnProperty(studyDate)) {
-      chartDateDict[studyDate] = studyTime;
+    if (chartDateDict[studyDate]) {
+      chartDateDict[studyDate] += studyTime;
     } else {
-      chartDateDict[studyDate] = +studyTime;
+      chartDateDict[studyDate] = studyTime;
     }
     // type dict
-    if (!chartTypeDict.hasOwnProperty(studyTopic)) {
-      chartTypeDict[studyTopic] = studyTime;
-    } else {
+    if (chartTypeDict[studyTopic]) {
       chartTypeDict[studyTopic] += studyTime;
+    } else {
+      chartTypeDict[studyTopic] = studyTime;
     }
   }
 
   // avg Data
-  for (var i=1; i<avgData.length; i++){
-    var studyDate = avgData[i]['studyDate'];
-    var studyTime = avgData[i]['studyTime'];
-    var studyTopic = avgData[i]['studyTopic'];
-    var count = 0;
-    if (!chartDateAvgDict.hasOwnProperty(studyDate)) {
-      chartDateAvgDict[studyDate] = studyTime;
+  for (const item of avgData){
+    const studyDate = item.studyDate;
+    const studyTime = item.studyTime;
+    if (chartDateAvgDict[studyDate]) {
+      chartDateAvgDict[studyDate] += studyTime;
+      chartDateAvgCnt[studyDate] += 1;
     } else {
-      chartDateAvgDict[studyDate] = +studyTime;
+      chartDateAvgDict[studyDate] = studyTime;
+      chartDateAvgCnt[studyDate] = 1
     }
   }
-  console.log(chartDateDict);
-  console.log(chartDateAvgDict);
+  // console.log(chartDateDict);
+  // console.log(Object.keys(chartDateAvgDict).length);
+  // console.log(Object.keys(chartDateAvgCnt).length);
   clearAllChartData();
 
+// Convert the keys (datetime strings) to timestamps and sort them in descending order
+  const sortedKeys = Object.keys(chartDateAvgDict)
+    .map(key => new Date(key).getTime()) // Convert to timestamps
+    .sort((a, b) => a - b) // Sort in descending order
+
   // avg type
-  for (var key in chartDateAvgDict) {
+  for (const timestamp of sortedKeys) {
+    // console.log(key);
+    const key = new Date(timestamp).toISOString().slice(0, 10);
     GLOBAL_TRACKER_LIST.dateChartAvgLabel.push(key);
-    GLOBAL_TRACKER_LIST.dateChartAvgData.push(chartDateAvgDict[key])
+    GLOBAL_TRACKER_LIST.dateChartAvgData.push(chartDateAvgDict[key]/chartDateAvgCnt[key])
     GLOBAL_TRACKER_LIST.dateChartLabel.push(key);
-    if(chartDateDict.hasOwnProperty(key)){
+    if(chartDateDict[key]){
       GLOBAL_TRACKER_LIST.dateChartDate.push(chartDateDict[key]);
     }else{
       GLOBAL_TRACKER_LIST.dateChartDate.push(0);
     }
   }
-  
+  // console.log(GLOBAL_TRACKER_LIST.dateChartAvgLabel);
+  // console.log(GLOBAL_TRACKER_LIST.dateChartAvgData);
   // console.log(chartDateAvgDict);
   // type
-  for (var key in chartTypeDict) {
+  for (const key in chartTypeDict) {
     GLOBAL_TRACKER_LIST.groupChartLabel.push(key);
     GLOBAL_TRACKER_LIST.groupChartData.push(chartTypeDict[key]);
   } 
@@ -255,10 +319,22 @@ function updateAllChart(){
   }
 }
 
+function destroyAllCharts() {
+  
+  for (let i=0; i<GLOBAL_TRACKER_PRESENTATION.name.length; i++){
+    var ctx = document.getElementById(GLOBAL_TRACKER_PRESENTATION.name[i]).getContext('2d');
+    var existingChart = Chart.getChart(ctx);
+    if (existingChart) {
+      existingChart.destroy();
+    }
+  }
+}
+
 // Function to update the chart based on the chart type and data
 function updateChart(chartType, chartName, labelName, dataName) {
   var label = GLOBAL_TRACKER_LIST[labelName];
   var data = GLOBAL_TRACKER_LIST[dataName];
+  const reportName = 'Report Period (mins): ' + formatDateToMMDDYYYY(GLOBAL_TRACKER_PRESENTATION.startDate) + ' to ' + formatDateToMMDDYYYY(GLOBAL_TRACKER_PRESENTATION.endDate);
   // console.log("chartType is: " + chartType);
   
   var ctx = document.getElementById(chartName).getContext('2d');
@@ -295,6 +371,12 @@ function updateChart(chartType, chartName, labelName, dataName) {
             beginAtZero: true,
           },
         },
+        plugins: {
+          title: {
+            display: true,
+            text: reportName, 
+          },
+        },
       },
     });
   }else{
@@ -321,4 +403,35 @@ function updateChart(chartType, chartName, labelName, dataName) {
       },
     });
   }
+}
+
+function updateRankChart(ret){
+  // console.log(ret);
+  label = [];
+  data = [];
+  ret.sort(compareSecondElement);
+  for (let i=0; i < ret.length; i++) {
+    label.push(ret[i][0]);
+    data.push(ret[i][1]);
+  }
+
+  const reportName = 'Top 10 (mins) - Report Period: ' + formatDateToMMDDYYYY(GLOBAL_TRACKER_PRESENTATION.startDate) + ' to ' + formatDateToMMDDYYYY(GLOBAL_TRACKER_PRESENTATION.endDate);
+  const rank = document.getElementById('chart4').getContext('2d');
+  const rankChart = new Chart(rank, {
+    type: 'bar',
+    data: {
+      labels: label.slice(0, 10),
+      datasets: [{
+          axis: 'y',
+          label: reportName,
+          data: data.slice(0, 10),
+          fill: false,
+          backgroundColor: dataPointColors,
+          borderWidth: 2
+        }],
+    },
+    options: {
+      indexAxis: 'y',
+    }
+  });
 }
