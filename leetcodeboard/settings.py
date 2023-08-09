@@ -12,16 +12,17 @@ DISCORD_CLIENT_ID = os.environ.get('DISCORD_CLIENT_ID')
 DISCORD_CLIENT_SECRET = os.environ.get('DISCORD_CLIENT_SECRET')
 
 # Prod
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-ALLOWED_HOSTS = ['studygrouppal.com', 'sdashboard.herokuapp.com']
-DISCORD_REDIRECT_URI = 'https://' + ALLOWED_HOSTS[0] + '/callback'
+# SECURE_SSL_REDIRECT = True
+# SESSION_COOKIE_SECURE = True
+# CSRF_COOKIE_SECURE = True
+# ALLOWED_HOSTS = ['studygrouppal.com', 'sdashboard.herokuapp.com']
+# DISCORD_REDIRECT_URI = 'https://' + ALLOWED_HOSTS[0] + '/callback'
 
 # Debug
-# DEBUG = True
-# ALLOWED_HOSTS = ['127.0.0.1']
-# DISCORD_REDIRECT_URI = 'http://' + ALLOWED_HOSTS[0] + ':8000/callback'
+DEBUG = True
+ALLOWED_HOSTS = ['127.0.0.1']
+DISCORD_REDIRECT_URI = 'http://' + ALLOWED_HOSTS[0] + ':8000/callback'
+os.environ["MONGODB_CONNECTION"] = "mongodb://localhost:27017/"
 
 INSTALLED_APPS = [
     'dashboard.apps.DashboardConfig',
@@ -36,6 +37,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_filters',
+    # third-party login dependencies
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
 ]
 
 MIDDLEWARE = [
@@ -80,7 +86,7 @@ DATABASES = {
             'ENFORCE_SCHEMA': False,
             'CLIENT': {
                 'host': os.environ.get('MONGODB_CONNECTION')
-            }  
+            }
         }
 }
 
